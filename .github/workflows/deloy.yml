@@ -1,4 +1,4 @@
-name: Deploy to AWS ECS with ECR
+name: Deploy Flight client app to AWS ECS
 
 'on':
   push:
@@ -6,46 +6,58 @@ name: Deploy to AWS ECS with ECR
       - main
 
 env:
-  AWS_REGION: ${{ secrets.RESIGON }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.AK }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.SK }}
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.RESIGON }}.amazonaws.com
-
-  ECR_REPO_FRONTEND: ${{ secrets.ECR_REPOSITORY }}
-  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
-  ECS_SERVICE_FRONTEND: ${{ secrets.ECS_SERVICE_NAME }}
-  ECS_TASK_DEFINITION_FRONTEND: ${{ secrets.ECS_TASK_DEFINATION }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+  ECS_CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
+  ECS_SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
+  TASK_DEFINITION_FILE: task-definition.json
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
 jobs:
   deploy:
-    name: Build & Deploy to ECS
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: 🔐 Configure AWS credentials
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: 🐳 Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: 🏗️ Build and Push Frontend Docker Image
+      - name: Log in to Amazon ECR
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPO_FRONTEND:latest .
-          docker push $ECR_REGISTRY/$ECR_REPO_FRONTEND:latest
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+          docker login --username AWS --password-stdin ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
 
-      - name: 🚀 Deploy Frontend to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          cluster: ${{ env.ECS_CLUSTER }}
-          service: ${{ env.ECS_SERVICE_FRONTEND }}
-          task-definition: ${{ env.ECS_TASK_DEFINITION_FRONTEND }}
-          image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO_FRONTEND }}:latest
-          container-name: test-ricky
+      - name: Set IMAGE_TAG
+        run: |
+          echo "IMAGE_TAG=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Build docker image
+        working-directory: ./flight-client
+        run: docker build -t $IMAGE_TAG .
+
+      - name: Push Docker image to ECR
+        run: docker push $IMAGE_TAG
+
+      - name: Replace image tag in ECS task definition
+        run: sed -i "s|replace-this-later|$IMAGE_TAG|" $TASK_DEFINITION_FILE
+
+      - name: Register new task definition
+        id: register-task
+        run: |
+          TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://$TASK_DEFINITION_FILE \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
+
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER_NAME }} \
+            --service ${{ env.ECS_SERVICE_NAME }} \
+            --task-definition $TASK_DEF_ARN
