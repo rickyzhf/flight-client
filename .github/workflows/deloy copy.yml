@@ -1,0 +1,73 @@
+name: Deploy to AWS ECS with ECR
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+  ECR_REPO_FRONTEND: ${{ secrets.ECR_REPO_FRONTEND }}
+  ECR_REPO_BACKEND: ${{ secrets.ECR_REPO_BACKEND }}
+
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+  ECS_SERVICE_FRONTEND: ${{ secrets.ECS_SERVICE_FRONTEND }}
+  ECS_SERVICE_BACKEND: ${{ secrets.ECS_SERVICE_BACKEND }}
+
+  ECS_TASK_DEFINITION_FRONTEND: ${{ secrets.ECS_TASK_DEFINITION_FRONTEND }}
+  ECS_TASK_DEFINITION_BACKEND: ${{ secrets.ECS_TASK_DEFINITION_BACKEND }}
+
+jobs:
+  deploy:
+    name: Build & Deploy to ECS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 🐳 Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: 🏗️ Build and Push Frontend Docker Image
+        working-directory: ./flight-client
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPO_FRONTEND:latest .
+          docker push $ECR_REGISTRY/$ECR_REPO_FRONTEND:latest
+
+      - name: ☕ Build and Push Backend Docker Image
+        working-directory: ./flight-api
+        run: |
+          ./mvnw clean package -DskipTests
+          docker build -t $ECR_REGISTRY/$ECR_REPO_BACKEND:latest .
+          docker push $ECR_REGISTRY/$ECR_REPO_BACKEND:latest
+
+      - name: 🚀 Deploy Frontend to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ env.ECS_SERVICE_FRONTEND }}
+          task-definition: ${{ env.ECS_TASK_DEFINITION_FRONTEND }}
+          image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO_FRONTEND }}:latest
+          container-name: frontend
+
+      - name: 🚀 Deploy Backend to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ env.ECS_SERVICE_BACKEND }}
+          task-definition: ${{ env.ECS_TASK_DEFINITION_BACKEND }}
+          image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO_BACKEND }}:latest
+          container-name: backend
