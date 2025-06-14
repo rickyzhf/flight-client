@@ -1,6 +1,6 @@
 name: Deploy to AWS ECS with ECR
 
-on:
+'on':
   push:
     branches:
       - main
@@ -37,11 +37,9 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: 🏗️ Build and Push Frontend Docker Image
-        working-directory: ./flight-client
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPO_FRONTEND:latest .
           docker push $ECR_REGISTRY/$ECR_REPO_FRONTEND:latest
-
 
       - name: 🚀 Deploy Frontend to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
@@ -51,4 +49,3 @@ jobs:
           task-definition: ${{ env.ECS_TASK_DEFINITION_FRONTEND }}
           image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO_FRONTEND }}:latest
           container-name: test-ricky
-
