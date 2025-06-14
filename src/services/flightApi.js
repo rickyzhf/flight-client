@@ -12,4 +12,5 @@ export const searchFlightsId = (id) =>  http.get(`/flights/searchId?id=${id}`);
 // export const searchFlightsId = (id) =>  http.post('/flights/searchId', id);
 export const getBookings = (status) => http.get(`/bookings?status=${status}`);
 
-export const createBooking = (params) => http.post('/bookings', params);
+// export const createBooking = (params) => http.post('/bookings', params);
+export const createBooking = (flightId) =>  http.post('/bookings', null, { params: { flightId },  });
