@@ -10,15 +10,15 @@ export default function FlightDetailPage() {
   const [loading, setLoading] = useState(true);
   const { createBooking } = useBooking();
   const navigate = useNavigate();
-console.log("111111111111111d -"+id);
+console.log("111111111111110d -"+id);
   useEffect(() => {
     setLoading(true);
     flightApi.searchFlightsId(id)
       .then((data) => {
-        console.log("11111111111111111 -"+data[0]);
-        console.log("11111111111111112 -"+data);
-        if (Array.isArray(data)) setFlight(data[0]);
-        else setFlight(data);
+        console.log("111111111111111110 -"+data[0]);
+        console.log("111111111111111120 -"+data.data);
+        if (Array.isArray(data)) setFlight(data.data);
+        else setFlight(data.data);
       })
       .finally(() => setLoading(false));
   }, [id]);
