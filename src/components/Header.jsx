@@ -12,7 +12,7 @@ export default function Header() {
   };
 
   return (
-    <header style={{ padding: 10, backgroundColor: '#eee', display: 'flex', justifyContent: 'space-between' }}>
+    <header style={{ padding: 10, backgroundColor: '#87CEEB', display: 'flex', justifyContent: 'space-between' }}>
       <div><Link to="/">FlightApp</Link></div>
       <nav>
         {user ? (
